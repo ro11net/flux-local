@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: global-vars
+  namespace: flux-system
+data:
+  CHART_VERSION: "6.5.4"
+  INGRESS_CLASS: "nginx"
+  DOMAIN: "example.com"
+  REGISTRY: "registry.example.com"
+  ENVIRONMENT: "production"

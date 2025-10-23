@@ -509,16 +509,34 @@ async def visit_kustomization(
                 f"path '{path}': {ERROR_DETAIL_BAD_KS} {err}"
             ) from err
 
+    # Parse child kustomizations
+    kustomizations = list(
+        filter(
+            is_allowed_source(selector.sources or []),
+            [
+                Kustomization.parse_doc(doc)
+                for doc in filter(FLUXTOMIZE_DOMAIN_FILTER, ks_docs)
+            ],
+        )
+    )
+    
+    # NEW: Propagate parent's postbuild_substitute to children
+    # This ensures multi-level nested kustomizations inherit substitutions
+    if visit_ks and visit_ks.postbuild_substitute:
+        for ks in kustomizations:
+            # Merge parent's substitutions with child's
+            # Child's explicit substitutions take precedence
+            parent_subs = visit_ks.postbuild_substitute
+            child_subs = ks.postbuild_substitute or {}
+            
+            # Child overrides parent (child takes precedence)
+            merged_subs = {**parent_subs, **child_subs}
+            
+            # Update the child's postbuild_substitute
+            ks.postbuild_substitute = merged_subs
+    
     return VisitResult(
-        kustomizations=list(
-            filter(
-                is_allowed_source(selector.sources or []),
-                [
-                    Kustomization.parse_doc(doc)
-                    for doc in filter(FLUXTOMIZE_DOMAIN_FILTER, ks_docs)
-                ],
-            )
-        ),
+        kustomizations=kustomizations,
         config_maps=[
             ConfigMap.parse_doc(doc)
             for doc in cfg_docs
@@ -531,7 +549,10 @@ async def visit_kustomization(
 
 
 async def kustomization_traversal(
-    selector: PathSelector, builder: CachableBuilder, options: Options
+    selector: PathSelector, 
+    builder: CachableBuilder, 
+    options: Options,
+    global_substitutions: dict[str, str] | None = None,  # ADD THIS
 ) -> list[Kustomization]:
     """Search for kustomizations in the specified path."""
 
@@ -586,6 +607,11 @@ async def kustomization_traversal(
                     ks,
                     cluster_config,
                 )
+
+            # ADD THIS BLOCK
+            # Apply global substitutions if provided
+            if global_substitutions:
+                ks = ks.apply_global_substitutions(global_substitutions)
 
             path_queue.append((ks_path, ks))
             response_kustomizations.append(ks)
@@ -749,6 +775,7 @@ async def build_manifest(
     selector: ResourceSelector = ResourceSelector(),
     options: Options = Options(),
     builder: CachableBuilder | None = None,
+    global_substitutions: dict[str, str] | None = None,
 ) -> Manifest:
     """Build a Manifest object from the local cluster.
 
@@ -769,7 +796,12 @@ async def build_manifest(
         builder = CachableBuilder()
 
     with trace_context(f"Cluster '{str(selector.path.path)}'"):
-        results = await kustomization_traversal(selector.path, builder, options)
+        results = await kustomization_traversal(
+            selector.path, 
+            builder, 
+            options,
+            global_substitutions  # ADD THIS
+        )
         clusters = [
             Cluster(
                 path=str(selector.path.relative_path),
@@ -778,6 +810,13 @@ async def build_manifest(
                 ],
             )
         ]
+
+        if global_substitutions:
+            for cluster in clusters:
+                cluster.kustomizations = [
+                    ks.apply_global_substitutions(global_substitutions)
+                    for ks in cluster.kustomizations
+                ]
 
         async def update_kustomization(cluster: Cluster) -> None:
             queue = [*cluster.kustomizations]

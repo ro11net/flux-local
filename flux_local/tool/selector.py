@@ -13,6 +13,7 @@ import shlex
 from typing import Any
 
 from flux_local import git_repo, helm
+from flux_local.substitute import load_configmap_data, SubstituteException
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -136,7 +137,41 @@ def add_common_flags(args: ArgumentParser) -> None:
         default="",
         help="If present, additional flags to pass to `kustomize build`",
     )
+    args.add_argument(
+        "--substitute-from",
+        type=pathlib.Path,
+        default=None,
+        help="Path to a ConfigMap YAML file containing global substitution variables",
+    )
 
+def load_global_substitutions(
+    substitute_from: pathlib.Path | None
+) -> dict[str, str] | None:
+    """Load global substitutions from a ConfigMap file.
+    
+    Args:
+        substitute_from: Path to ConfigMap YAML file
+        
+    Returns:
+        Dictionary of substitutions, or None if no file provided
+        
+    Raises:
+        SubstituteException: If file cannot be loaded or parsed
+    """
+    if not substitute_from:
+        return None
+    
+    try:
+        global_substitutions = load_configmap_data(substitute_from)
+        _LOGGER.info(
+            "Loaded %d global substitution variables from %s",
+            len(global_substitutions),
+            substitute_from
+        )
+        return global_substitutions
+    except SubstituteException as e:
+        _LOGGER.error("Failed to load substitutions: %s", e)
+        raise
 
 def add_ks_selector_flags(args: ArgumentParser) -> None:
     """Add common kustomization selector flags to the arguments object."""

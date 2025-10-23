@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: my-app
+  labels:
+    environment: ${ENVIRONMENT}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  namespace: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: app
+        image: ${IMAGE_REGISTRY}/my-app:latest
+        env:
+        - name: REGION
+          value: ${CLUSTER_REGION}

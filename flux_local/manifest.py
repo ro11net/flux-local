@@ -1021,6 +1021,105 @@ class Kustomization(BaseManifest):
                 post_build["substitute"] = substitute
             substitute.update(substitutions)
 
+    def apply_global_substitutions(
+        self, global_substitutions: dict[str, str]
+    ) -> "Kustomization":
+        """Apply global substitutions to this Kustomization.
+
+        Global substitutions are merged with existing postBuild.substitute values,
+        with explicitly defined substitutions in the Kustomization taking precedence.
+
+        Args:
+            global_substitutions: Dictionary of global substitution variables
+
+        Returns:
+            A new Kustomization instance with merged substitutions
+        """
+        from flux_local.substitute import merge_substitutions
+
+        # Get current substitutions (may be None or a dict)
+        current_subs = self.postbuild_substitute or {}
+
+        # Merge with global substitutions (current takes precedence)
+        merged_subs = merge_substitutions(current_subs, global_substitutions)
+
+        # Create a new Kustomization with the merged substitutions
+        # We need to update both postbuild_substitute field and the contents dict
+        # Create a new Kustomization with the merged substitutions
+        # We need to update both postbuild_substitute field and the contents dict
+        new_contents = None
+        if self.contents:
+            import copy
+            new_contents = copy.deepcopy(self.contents)
+            
+            # Ensure postBuild section exists
+            if "postBuild" not in new_contents["spec"]:
+                new_contents["spec"]["postBuild"] = {}
+            new_contents["spec"]["postBuild"]["substitute"] = merged_subs
+
+            # NEW: Actually substitute variables in spec fields
+            # This is critical for fields like components, patches, path, etc.
+            # that kustomize will use during build
+            def substitute_value(value, substitutions):
+                """Recursively substitute variables in a value.
+                
+                Replaces ${VAR} patterns with their values from substitutions dict.
+                Handles strings, lists, and nested dictionaries.
+                """
+                if isinstance(value, str):
+                    # Substitute all ${VAR} patterns
+                    for var_name, var_value in substitutions.items():
+                        value = value.replace(f"${{{var_name}}}", var_value)
+                    return value
+                elif isinstance(value, list):
+                    # Recursively substitute in list items
+                    return [substitute_value(item, substitutions) for item in value]
+                elif isinstance(value, dict):
+                    # Recursively substitute in dict values
+                    return {k: substitute_value(v, substitutions) for k, v in value.items()}
+                else:
+                    # Return unchanged for other types (int, bool, None, etc.)
+                    return value
+            
+            # Get the spec section
+            spec = new_contents.get("spec", {})
+            
+            # Substitute variables in fields that may contain ${VAR} patterns
+            # These fields are used by kustomize before postBuild substitutions
+            fields_to_substitute = [
+                "path",                    # spec.path may have ${ENVIRONMENT}
+                "components",              # spec.components[] may have ${RUNTIME_FLAVOR}
+                "patches",                 # spec.patches[] may have variables
+                "patchesStrategicMerge",   # spec.patchesStrategicMerge[] may have variables
+                "patchesJson6902",         # spec.patchesJson6902[] may have variables
+            ]
+            
+            for field in fields_to_substitute:
+                if field in spec:
+                    spec[field] = substitute_value(spec[field], merged_subs)
+            
+            # Update the spec with substituted values
+            new_contents["spec"] = spec
+
+        # Create new instance with updated values
+        return Kustomization(
+            name=self.name,
+            namespace=self.namespace,
+            path=self.path,
+            source_path=self.source_path,
+            source_kind=self.source_kind,
+            source_name=self.source_name,
+            source_namespace=self.source_namespace,
+            target_namespace=self.target_namespace,
+            contents=new_contents,
+            postbuild_substitute=merged_subs,
+            postbuild_substitute_from=self.postbuild_substitute_from,
+            depends_on=self.depends_on,
+            labels=self.labels,
+            helm_repos=self.helm_repos,
+            oci_repos=self.oci_repos,
+            helm_releases=self.helm_releases,
+        )
 
 @dataclass
 class Cluster(BaseManifest):
