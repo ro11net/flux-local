@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: level1
+  labels:
+    level: "1"
+    environment: ${ENVIRONMENT}

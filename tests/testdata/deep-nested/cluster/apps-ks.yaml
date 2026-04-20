@@ -1,0 +1,14 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps
+  namespace: flux-system
+  labels:
+    level: "1"
+    environment: ${ENVIRONMENT}
+spec:
+  interval: 10m
+  path: ./tests/testdata/deep-nested/cluster/apps
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
