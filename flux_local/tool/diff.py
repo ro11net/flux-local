@@ -139,20 +139,21 @@ class DiffKustomizationAction:
         limit_bytes: int,
         output_file: str,
         builder: git_repo.CachableBuilder | None = None,
-        substitute_from: pathlib.Path | None = None,  # ADD THIS
+        substitute_from: pathlib.Path | None = None,
         **kwargs,  # pylint: disable=unused-argument
     ) -> None:
         """Async Action implementation."""
-        # ADD THIS LINE:
         global_substitutions = selector.load_global_substitutions(substitute_from)
-        
+
         query = selector.build_ks_selector(**kwargs)
         query.helm_release.enabled = False
 
         content = ObjectOutput(strip_attrs)
         query.kustomization.visitor = content.visitor()
         await git_repo.build_manifest(
-            selector=query, options=selector.options(**kwargs)
+            selector=query,
+            options=selector.options(**kwargs),
+            global_substitutions=global_substitutions,
         )
 
         orig_content = ObjectOutput(strip_attrs)
@@ -160,7 +161,9 @@ class DiffKustomizationAction:
             query.path = path_selector
             query.kustomization.visitor = orig_content.visitor()
             await git_repo.build_manifest(
-                selector=query, options=selector.options(**kwargs)
+                selector=query,
+                options=selector.options(**kwargs),
+                global_substitutions=global_substitutions,
             )
 
         if not orig_content.content and not content.content:
@@ -230,11 +233,12 @@ class DiffHelmReleaseAction:
         strip_attrs: list[str] | None,
         limit_bytes: int,
         output_file: str,
+        substitute_from: pathlib.Path | None = None,
         **kwargs,  # pylint: disable=unused-argument
     ) -> None:
         """Async Action implementation."""
         global_substitutions = selector.load_global_substitutions(substitute_from)
-        
+
         query = selector.build_hr_selector(**kwargs)
         content = ObjectOutput(strip_attrs)
         helm_visitor = HelmVisitor()
@@ -245,7 +249,9 @@ class DiffHelmReleaseAction:
         query.doc_visitor = helm_visitor.chart_visitor()
         options = selector.build_helm_options(**kwargs)
         await git_repo.build_manifest(
-            selector=query, options=selector.options(**kwargs)
+            selector=query,
+            options=selector.options(**kwargs),
+            global_substitutions=global_substitutions,
         )
 
         orig_content = ObjectOutput(strip_attrs)
@@ -258,7 +264,9 @@ class DiffHelmReleaseAction:
             query.helm_release.visitor = orig_helm_visitor.release_visitor()
             query.doc_visitor = orig_helm_visitor.chart_visitor()
             await git_repo.build_manifest(
-                selector=query, options=selector.options(**kwargs)
+                selector=query,
+                options=selector.options(**kwargs),
+                global_substitutions=global_substitutions,
             )
 
         if not helm_visitor.releases and not orig_helm_visitor.releases:

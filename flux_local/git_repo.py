@@ -520,20 +520,11 @@ async def visit_kustomization(
         )
     )
     
-    # NEW: Propagate parent's postbuild_substitute to children
-    # This ensures multi-level nested kustomizations inherit substitutions
     if visit_ks and visit_ks.postbuild_substitute:
         for ks in kustomizations:
-            # Merge parent's substitutions with child's
-            # Child's explicit substitutions take precedence
             parent_subs = visit_ks.postbuild_substitute
             child_subs = ks.postbuild_substitute or {}
-            
-            # Child overrides parent (child takes precedence)
-            merged_subs = {**parent_subs, **child_subs}
-            
-            # Update the child's postbuild_substitute
-            ks.postbuild_substitute = merged_subs
+            ks.postbuild_substitute = {**parent_subs, **child_subs}
     
     return VisitResult(
         kustomizations=kustomizations,
@@ -549,10 +540,10 @@ async def visit_kustomization(
 
 
 async def kustomization_traversal(
-    selector: PathSelector, 
-    builder: CachableBuilder, 
+    selector: PathSelector,
+    builder: CachableBuilder,
     options: Options,
-    global_substitutions: dict[str, str] | None = None,  # ADD THIS
+    global_substitutions: dict[str, str] | None = None,
 ) -> list[Kustomization]:
     """Search for kustomizations in the specified path."""
 
@@ -608,8 +599,6 @@ async def kustomization_traversal(
                     cluster_config,
                 )
 
-            # ADD THIS BLOCK
-            # Apply global substitutions if provided
             if global_substitutions:
                 ks = ks.apply_global_substitutions(global_substitutions)
 
@@ -797,10 +786,10 @@ async def build_manifest(
 
     with trace_context(f"Cluster '{str(selector.path.path)}'"):
         results = await kustomization_traversal(
-            selector.path, 
-            builder, 
+            selector.path,
+            builder,
             options,
-            global_substitutions  # ADD THIS
+            global_substitutions,
         )
         clusters = [
             Cluster(
@@ -810,13 +799,6 @@ async def build_manifest(
                 ],
             )
         ]
-
-        if global_substitutions:
-            for cluster in clusters:
-                cluster.kustomizations = [
-                    ks.apply_global_substitutions(global_substitutions)
-                    for ks in cluster.kustomizations
-                ]
 
         async def update_kustomization(cluster: Cluster) -> None:
             queue = [*cluster.kustomizations]

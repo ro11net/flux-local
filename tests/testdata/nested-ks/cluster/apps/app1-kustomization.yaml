@@ -10,6 +10,5 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
-  components
   dependsOn:
     - name: root

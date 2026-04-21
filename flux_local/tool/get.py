@@ -65,7 +65,7 @@ class GetKustomizationAction:
         self,
         output: str | None,
         builder: git_repo.CachableBuilder | None = None,
-        substitute_from: pathlib.Path | None = None,  # ADD THIS
+        substitute_from: pathlib.Path | None = None,
         **kwargs,  # pylint: disable=unused-argument
     ) -> None:
         """Async Action implementation."""
@@ -76,7 +76,9 @@ class GetKustomizationAction:
             query.helm_release.enabled = False
             query.helm_repo.enabled = False
         manifest = await git_repo.build_manifest(
-            selector=query, options=selector.options(**kwargs)
+            selector=query,
+            options=selector.options(**kwargs),
+            global_substitutions=global_substitutions,
         )
 
         results: list[dict[str, str]] = []
@@ -128,6 +130,7 @@ class GetHelmReleaseAction:
 
     async def run(  # type: ignore[no-untyped-def]
         self,
+        substitute_from: pathlib.Path | None = None,
         **kwargs,  # pylint: disable=unused-argument
     ) -> None:
         """Async Action implementation."""
@@ -135,7 +138,9 @@ class GetHelmReleaseAction:
 
         query = selector.build_hr_selector(**kwargs)
         manifest = await git_repo.build_manifest(
-            selector=query, options=selector.options(**kwargs)
+            selector=query,
+            options=selector.options(**kwargs),
+            global_substitutions=global_substitutions,
         )
 
         cols = ["name", "revision", "chart", "source"]
@@ -212,6 +217,7 @@ class GetClusterAction:
         output_file: str,
         enable_images: bool,
         only_images: bool,
+        substitute_from: pathlib.Path | None = None,
         **kwargs,  # pylint: disable=unused-argument
     ) -> None:
         """Async Action implementation."""
@@ -247,7 +253,9 @@ class GetClusterAction:
             query.helm_release.visitor = helm_visitor.release_visitor()
 
         manifest = await git_repo.build_manifest(
-            selector=query, options=selector.options(**kwargs)
+            selector=query,
+            options=selector.options(**kwargs),
+            global_substitutions=global_substitutions,
         )
         if output == "yaml" or output == "json":
             if image_visitor:

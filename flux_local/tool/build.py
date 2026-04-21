@@ -12,7 +12,6 @@ from typing import cast
 from flux_local import git_repo
 from flux_local.visitor import ContentOutput, HelmVisitor
 from flux_local.helm import helm_cache
-from flux_local.substitute import load_configmap_data, SubstituteException  # NEW
 
 from . import selector
 from .format import open_file
@@ -59,13 +58,6 @@ class BuildAllAction:
             default="/dev/stdout",
             help="Output file for the results of the command",
         )
-        # NEW: Add substitute-from argument
-        # args.add_argument(
-        #     "--substitute-from",
-        #     type=pathlib.Path,
-        #     default=None,
-        #     help="Path to a ConfigMap YAML file containing global substitution variables",
-        # )
         # pylint: disable=duplicate-code
         selector.add_common_flags(args)
         selector.add_helm_options_flags(args)
@@ -80,23 +72,11 @@ class BuildAllAction:
         skip_secrets: bool,
         skip_kinds: list[str],
         output_file: str,
+        substitute_from: pathlib.Path | None = None,
         **kwargs,  # pylint: disable=unused-argument
     ) -> None:
         """Async Action implementation."""
-
-        # NEW: Load global substitutions if provided
-        global_substitutions = None
-        if substitute_from:
-            try:
-                global_substitutions = load_configmap_data(substitute_from)
-                _LOGGER.info(
-                    "Loaded %d global substitution variables from %s",
-                    len(global_substitutions),
-                    substitute_from
-                )
-            except SubstituteException as e:
-                _LOGGER.error("Failed to load substitutions: %s", e)
-                raise
+        global_substitutions = selector.load_global_substitutions(substitute_from)
 
         query = git_repo.ResourceSelector(path=git_repo.PathSelector(path=path))
         query.kustomization.namespace = None
@@ -119,7 +99,9 @@ class BuildAllAction:
         query.oci_repo.visitor = helm_visitor.repo_visitor()
         query.helm_release.visitor = helm_visitor.release_visitor()
         await git_repo.build_manifest(
-            selector=query, options=selector.options(**kwargs)
+            selector=query,
+            options=selector.options(**kwargs),
+            global_substitutions=global_substitutions,
         )
 
         # We use a separate output object so that the contents of the HelmRelease
@@ -175,13 +157,6 @@ class BuildKustomizationAction:
             default="/dev/stdout",
             help="Output file for the results of the command",
         )
-        # NEW: Add substitute-from argument
-        # args.add_argument(
-        #     "--substitute-from",
-        #     type=pathlib.Path,
-        #     default=None,
-        #     help="Path to a ConfigMap YAML file containing global substitution variables",
-        # )
         selector.add_ks_selector_flags(args)
         args.set_defaults(cls=cls)
         return args
@@ -189,23 +164,11 @@ class BuildKustomizationAction:
     async def run(  # type: ignore[no-untyped-def]
         self,
         output_file: str,
+        substitute_from: pathlib.Path | None = None,
         **kwargs,  # pylint: disable=unused-argument
     ) -> None:
         """Async Action implementation."""
-
-        # NEW: Load global substitutions if provided
-        global_substitutions = None
-        if substitute_from:
-            try:
-                global_substitutions = load_configmap_data(substitute_from)
-                _LOGGER.info(
-                    "Loaded %d global substitution variables from %s",
-                    len(global_substitutions),
-                    substitute_from
-                )
-            except SubstituteException as e:
-                _LOGGER.error("Failed to load substitutions: %s", e)
-                raise
+        global_substitutions = selector.load_global_substitutions(substitute_from)
 
         query = selector.build_ks_selector(**kwargs)
         query.helm_release.enabled = False
@@ -213,7 +176,9 @@ class BuildKustomizationAction:
         content = ContentOutput()
         query.kustomization.visitor = content.visitor()
         await git_repo.build_manifest(
-            selector=query, options=selector.options(**kwargs)
+            selector=query,
+            options=selector.options(**kwargs),
+            global_substitutions=global_substitutions,
         )
 
         with open_file(output_file, "w") as file:
@@ -251,13 +216,6 @@ class BuildHelmReleaseAction:
             default="/dev/stdout",
             help="Output file for the results of the command",
         )
-        # NEW: Add substitute-from argument
-        # args.add_argument(
-        #     "--substitute-from",
-        #     type=pathlib.Path,
-        #     default=None,
-        #     help="Path to a ConfigMap YAML file containing global substitution variables",
-        # )
         selector.add_hr_selector_flags(args)
         selector.add_helm_options_flags(args)
         args.set_defaults(cls=cls)
@@ -266,23 +224,10 @@ class BuildHelmReleaseAction:
     async def run(  # type: ignore[no-untyped-def]
         self,
         output_file: str,
+        substitute_from: pathlib.Path | None = None,
         **kwargs,  # pylint: disable=unused-argument
     ) -> None:
         """Async Action implementation."""
-
-        # NEW: Load global substitutions if provided
-        # global_substitutions = None
-        # if substitute_from:
-        #     try:
-        #         global_substitutions = load_configmap_data(substitute_from)
-        #         _LOGGER.info(
-        #             "Loaded %d global substitution variables from %s",
-        #             len(global_substitutions),
-        #             substitute_from
-        #         )
-        #     except SubstituteException as e:
-        #         _LOGGER.error("Failed to load substitutions: %s", e)
-        #         raise
         global_substitutions = selector.load_global_substitutions(substitute_from)
 
         query = selector.build_hr_selector(**kwargs)
@@ -295,7 +240,9 @@ class BuildHelmReleaseAction:
         query.doc_visitor = helm_visitor.chart_visitor()
         helm_options = selector.build_helm_options(**kwargs)
         await git_repo.build_manifest(
-            selector=query, options=selector.options(**kwargs)
+            selector=query,
+            options=selector.options(**kwargs),
+            global_substitutions=global_substitutions,
         )
 
         helm_content = ContentOutput()
