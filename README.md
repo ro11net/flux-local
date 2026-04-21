@@ -53,6 +53,8 @@ NAME       REVISION    CHART              SOURCE
 metallb    4.1.14      metallb-metallb    bitnami
 ```
 
+The `--substitute-from` flag is also supported and works the same way as in `flux-local build`.
+
 ### flux-local build
 
 You can use the `flux-local` cli to build objects in a cluster, similar to how you
@@ -82,6 +84,26 @@ ConfigMap: 1
 Deployment: 2
 Ingress: 1
 Service: 2
+```
+
+The `--substitute-from` flag accepts a path to a ConfigMap YAML file containing global
+`postBuild` substitution variables. These are merged with any substitutions defined
+in each Kustomization, with Kustomization-level values taking precedence:
+
+```yaml
+# global-vars.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: global-vars
+  namespace: flux-system
+data:
+  IMAGE_REGISTRY: "registry.example.com"
+  ENVIRONMENT: "production"
+```
+
+```bash
+$ flux-local build ks --path tests/testdata/cluster/ --substitute-from global-vars.yaml
 ```
 
 ### flux-local diff
@@ -136,6 +158,8 @@ $ flux-local diff hr -n podinfo podinfo
      ports:
 ...
 ```
+
+The `--substitute-from` flag is also supported and works the same way as in `flux-local build`.
 
 You may also use an external diff program such as [dyff](https://github.com/homeport/dyff) which
 is more compact for diffing yaml resources:
